@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset=utf-8>
+            <title>Two spheres in the universe</title>
+            <style>
+                body{
+                    margin: 0;
+                    overflow: hidden
+                } 
+                canvas{
+                    width: 100%;
+                    height: 100%
+                }
+            </style>
+    </head> 
+    <body>
+        <script src="js/three.min.js"></script>
+        <script> 
+            //Must set overflow to hidden to avoid a bit larger screnn rendering
+            
+            var scene, camera, renderer;
+            var sphere;
+            
+            function init() {
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(
+                    75,  //field of view, from bottom to top
+                    window.innerWidth / window.innerHeight, //camera's aspect ratio
+                    0.1,    //near clipping plane
+                    1000    //far clipping plane
+                );
+                
+                renderer = window.WebGLRenderingContext ? new THREE.WebGLRenderer() : new THREE.CanvasRenderer();   //Compatibility with browsers which doesn't support WebGL, such as IE 10 or earlier
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+                
+                var geometry = new THREE.SphereGeometry(
+                    2,  //Radius size
+                    8,  //vertical segments
+                    6   //horizontal segments
+                );
+                
+                var loader = new THREE.TextureLoader();
+                loader.load(
+                    'textures/land_ocean_ice_cloud_2048.jpg',
+                    function (texture) {
+                        var material = new THREE.MeshPhongMaterial( 
+                            { 
+                                map: texture  
+                            } 
+                        ); 
+                        sphere = new THREE.Mesh(geometry, material); 
+                        scene.add(sphere); 
+                    }
+                );            
+                
+                camera.position.z = 5;
+            }
+            
+            function render() { 
+                requestAnimationFrame( render ); 
+                //sphere.rotation.x += 0.01; 
+                //sphere.rotation.y += 0.01;
+                renderer.render( scene, camera ); 
+            }           
+            
+            init();
+            render();
+            
+        </script>
+    </body>
+</html>
