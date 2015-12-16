@@ -16,29 +16,58 @@
     </head> 
     <body>
         <script src="js/three.min.js"></script>
+        <script src="js/TrackballControls.js"></script>
+        <script src="js/particles_stream.js"></script>
         <script> 
             //Must set overflow to hidden to avoid a bit larger screnn rendering
             
-            var scene, camera, renderer;
-            var sphere;
+            var container;
+            var scene, camera, controls, renderer;
+            var spheres = [], plane;
             
-            function init() {
+            var raycaster = new THREE.Raycaster();
+			var mouse = new THREE.Vector2();
+			var offset = new THREE.Vector3();
+			var INTERSECTED, SELECTED;
+                        
+            init();
+            
+            function init() {            
+                container = document.createElement('div');
+				document.body.appendChild(container);
+                
                 scene = new THREE.Scene();
+                
                 camera = new THREE.PerspectiveCamera(
                     75,  //field of view, from bottom to top
                     window.innerWidth / window.innerHeight, //camera's aspect ratio
                     0.1,    //near clipping plane
-                    1000    //far clipping plane
-                );
+                    3000    //far clipping plane
+                );                
+                camera.position.z = 500;
                 
-                renderer = window.WebGLRenderingContext ? new THREE.WebGLRenderer() : new THREE.CanvasRenderer();   //Compatibility with browsers which doesn't support WebGL, such as IE 10 or earlier
+                controls = new THREE.TrackballControls( camera );
+				controls.rotateSpeed = 1.0;
+				controls.zoomSpeed = 1.2;
+				controls.panSpeed = 0.8;
+				controls.noZoom = false;
+				controls.noPan = false;
+				controls.staticMoving = true;
+				controls.dynamicDampingFactor = 0.3;
+                
+                renderer = window.WebGLRenderingContext ? new THREE.WebGLRenderer({antialias: true}) : new THREE.CanvasRenderer();   //Compatibility with browsers which doesn't support WebGL, such as IE 10 or earlier
                 renderer.setSize(window.innerWidth, window.innerHeight);
-                document.body.appendChild(renderer.domElement);
+                container.appendChild(renderer.domElement);
                 
-                var geometry = new THREE.SphereGeometry(
-                    2,  //Radius size
-                    8,  //vertical segments
-                    6   //horizontal segments
+                var geometry_earth = new THREE.SphereGeometry(
+                    200,  //Radius size
+                    20,  //vertical segments
+                    20   //horizontal segments
+                );
+                var geometry_copy = new THREE.SphereGeometry(
+                    100,  //Radius size
+                    20,  //vertical segments
+                    20   //horizontal segments
                 );
                 
                 var loader = new THREE.TextureLoader();
@@ -47,26 +76,172 @@
                     function (texture) {
                         var material = new THREE.MeshPhongMaterial( 
                             { 
-                                map: texture  
+                                map: texture
                             } 
                         ); 
-                        sphere = new THREE.Mesh(geometry, material); 
-                        scene.add(sphere); 
+                        
+                        spheres[0] = new THREE.Mesh(geometry_earth, material);  //sphere_earth
+                        spheres[1] = new THREE.Mesh(geometry_copy, material);   //sphere_copy
+                        
+                        spheres[0].name = "earth";
+                        spheres[1].name = "copy";
+                        
+                        plane = new THREE.Mesh(
+                            new THREE.PlaneBufferGeometry( 5000, 5000, 8, 8 ),
+                            new THREE.MeshBasicMaterial( { visible: false } )
+                        );
+                        
+                        //Tweak positions
+                        spheres[0].position.x = -200;
+                        spheres[0].position.y = -10;
+                        spheres[0].position.z = -20;
+                        
+                        spheres[1].position.x = 200;
+                        spheres[1].position.y = 10;
+                        spheres[1].position.z = 20;
+                        
+                        var ambientLight = new THREE.AmbientLight( 0x404040 ); // soft white light
+                        //Note: MeshPhongMaterial will only work if there is a point light
+                        var pointLight = new THREE.PointLight(0xFFFFFF); // Set the color of the light source (white)
+                        pointLight.position.set(-50, -50, 600); // Position the light source at (x, y, z)
+                                                
+                        //Add 3d objects to scene
+                        for(sphere of spheres) {
+                            scene.add(sphere);
+                        }
+                        //Add plane to scene
+                        scene.add(plane);                        
+                        
+                        //Add lights
+                        scene.add(ambientLight);
+                        scene.add(pointLight);
+                        
+                        //Add a stream of particles                        
+                        initParticleSystem(scene, 
+                            {
+                                start: spheres[0].position,
+                                end: spheres[1].position
+                            }
+                        );
+                        
+                        render();
                     }
-                );            
+                );    
                 
-                camera.position.z = 5;
+                renderer.domElement.addEventListener('mousemove', onDocumentMouseMove, false);
+                renderer.domElement.addEventListener('mousedown', onDocumentMouseDown, false);
+				renderer.domElement.addEventListener('mouseup', onDocumentMouseUp, false);
+                
+                window.addEventListener( 'resize', onWindowResize, false );
             }
             
             function render() { 
                 requestAnimationFrame( render ); 
-                //sphere.rotation.x += 0.01; 
-                //sphere.rotation.y += 0.01;
+                spheres[0].rotation.x += 0.001; 
+                spheres[0].rotation.y += 0.001;
+                spheres[1].rotation.x += 0.0005; 
+                spheres[1].rotation.y += 0.0005;
+                
+                controls.update();
+                
+                mParticleSystem.material.uniforms['uTime'].value = mTime                
+                
+                mTime += mTimeStep;
+                mTime %= mDuration;
+                
                 renderer.render( scene, camera ); 
             }           
             
-            init();
-            render();
+            function onDocumentMouseMove(event) {
+                event.preventDefault();
+                
+                if(event.ctrlKey) {
+                    return;
+                }
+                
+                //Get current mouse 2d coordinates
+				mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+				mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                //Update picking ray with camera and mouse position
+				raycaster.setFromCamera(mouse, camera);
+                
+				if (SELECTED) {
+					var intersects = raycaster.intersectObject(plane);
+
+					if (intersects.length > 0) {
+						SELECTED.position.copy(intersects[0].point.sub(offset));
+                        removeParticleSystem(scene);
+                        initParticleSystem(scene, {
+                            start: spheres[0].position,
+                            end: spheres[1].position
+                        });
+					}                    
+					return;
+				}
+
+				var intersects = raycaster.intersectObjects(spheres);
+
+				if (intersects.length > 0) {
+					if (INTERSECTED != intersects[0].object) {
+						if (INTERSECTED) {
+                            INTERSECTED.material.color.setHex(INTERSECTED.currentHex);
+                        }
+						INTERSECTED = intersects[0].object;
+						INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
+
+						plane.position.copy(INTERSECTED.position);
+						plane.lookAt(camera.position);
+					}
+					container.style.cursor = 'pointer';
+				} 
+                else {
+					if (INTERSECTED) {
+                        INTERSECTED.material.color.setHex(INTERSECTED.currentHex);
+                    }
+					INTERSECTED = null;
+					container.style.cursor = 'auto';    
+				}
+            }
+            
+            function onDocumentMouseDown(event) {
+				event.preventDefault();
+				raycaster.setFromCamera(mouse, camera);
+
+				var intersects = raycaster.intersectObjects(spheres);
+
+				if (intersects.length > 0) {
+                    if(event.ctrlKey) {
+                        controls.enabled = true;
+                    }
+                    else {
+                        controls.enabled = false;
+                    }					
+					SELECTED = intersects[0].object;
+					var intersects = raycaster.intersectObject(plane);
+					if (intersects.length > 0) {
+						offset.copy(intersects[0].point).sub(plane.position);
+					}
+					container.style.cursor = 'move';
+				}
+			}
+
+			function onDocumentMouseUp( event ) {
+				event.preventDefault();
+				controls.enabled = true;
+				if (INTERSECTED) {
+					plane.position.copy(INTERSECTED.position);
+					SELECTED = null;
+				}
+				container.style.cursor = 'auto';
+			}
+            
+            //Resize functions
+            function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+            
             
         </script>
     </body>
