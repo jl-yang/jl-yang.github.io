@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset=utf-8>
+        <title>Spheres in the Universe</title>
+        <link rel="stylesheet" type="text/css" href="demo.css">
+    </head>
+    <body>
+        <div id="info_box"><span>info</span><br/></div>
+        <script src="js/jquery-1.12.0.min.js"></script>
+        <script src="js/three.min.js"></script>
+        <script src="js/TrackballControls.js"></script>
+        <script src="js/particles_stream.js"></script>
+
+        <script src="js/TextGeometry.js"></script>
+        <script src="js/FontUtils.js"></script>
+
+        <script src="js/gentilis_bold.typeface.js"></script>
+        <script src="js/gentilis_regular.typeface.js"></script>
+        <script src="js/optimer_bold.typeface.js"></script>
+
+        <script>
+            $(document).ready(function() {
+                $.ajax({
+                    url: "http://localhost:3000/data"
+                }).done(function(data) {
+
+
+                  console.log(data);
+                  //Now start
+                  var container;
+                  var scene, camera, controls, renderer;
+                  var spheres = [], plane;
+
+                  var raycaster = new THREE.Raycaster();
+            var mouse = new THREE.Vector2();
+            var offset = new THREE.Vector3();
+            var INTERSECTED, SELECTED;
+
+                  init();
+
+                  function init() {
+                      container = document.createElement('div');
+              document.body.appendChild(container);
+
+                      scene = new THREE.Scene();
+                      /*
+                      camera = new THREE.PerspectiveCamera(
+                          75,  //field of view, from bottom to top
+                          window.innerWidth / window.innerHeight, //camera's aspect ratio
+                          0.1,    //near clipping plane
+                          3000    //far clipping plane
+                      ); */
+
+                      camera = new THREE.OrthographicCamera(
+                          window.innerWidth / -2,
+                          window.innerWidth / 2,
+                          window.innerHeight / 2,
+                          window.innerHeight / -2,
+                          0.1,
+                          3000
+                      );
+                      camera.position.z = 800;
+                      /*
+                      controls = new THREE.TrackballControls( camera );
+              controls.rotateSpeed = 1.0;
+              controls.zoomSpeed = 1.2;
+              controls.panSpeed = 0.8;
+              controls.noZoom = false;
+              controls.noPan = false;
+              controls.staticMoving = true;
+              controls.dynamicDampingFactor = 0.3;*/
+
+                      renderer = window.WebGLRenderingContext ? new THREE.WebGLRenderer({antialias: true}) : new THREE.CanvasRenderer();   //Compatibility with browsers which doesn't support WebGL, such as IE 10 or earlier
+                      renderer.setSize(window.innerWidth, window.innerHeight);
+                      container.appendChild(renderer.domElement);
+
+                      var geometry_earth = new THREE.SphereGeometry(
+                          200,  //Radius size
+                          20,  //vertical segments
+                          20   //horizontal segments
+                      );
+                      var geometry_copy = new THREE.SphereGeometry(
+                          100,  //Radius size
+                          20,  //vertical segments
+                          20   //horizontal segments
+                      );
+                      var geometry_ip_1 = new THREE.TextGeometry( "139.157.236.206", {
+
+                size: 70,
+                height: 20,
+                curveSegments: 4,
+
+                font: "optimer",
+                weight: "bold",
+                style: "normal",
+
+                bevelThickness: 2,
+                bevelSize: 1.5,
+                bevelEnabled: true,
+
+                material: 0,
+                extrudeMaterial: 1
+
+              });
+                      var geometry_ip_2 = new THREE.TextGeometry( "239.0.171.91", {
+
+                size: 35,
+                height: 10,
+                curveSegments: 4,
+
+                font: "optimer",
+                weight: "bold",
+                style: "normal",
+
+                bevelThickness: 2,
+                bevelSize: 1.5,
+                bevelEnabled: true,
+
+                material: 0,
+                extrudeMaterial: 1
+
+              });
+                      var text_material = new THREE.MeshFaceMaterial( [
+                new THREE.MeshPhongMaterial( { color: 0xffffff, shading: THREE.FlatShading } ), // front
+                new THREE.MeshPhongMaterial( { color: 0xffffff, shading: THREE.SmoothShading } ) // side
+              ] );
+
+                      var loader = new THREE.TextureLoader();
+                      loader.load(
+                          'textures/land_ocean_ice_cloud_2048.jpg',
+                          function (texture) {
+                              var material = new THREE.MeshPhongMaterial(
+                                  {
+                                      map: texture
+                                  }
+                              );
+
+                              spheres[0] = new THREE.Mesh(geometry_earth, material);  //sphere_earth
+                              spheres[1] = new THREE.Mesh(geometry_copy, material);   //sphere_copy
+                              spheres[2] = new THREE.Mesh(geometry_copy, material);
+                              spheres[3] = new THREE.Mesh(geometry_copy, material);
+
+                              spheres[0].name = "earth";
+                              spheres[1].name = "copy";
+
+                              plane = new THREE.Mesh(
+                                  new THREE.PlaneBufferGeometry( 10000, 10000, 8, 8 ),
+                                  new THREE.MeshBasicMaterial( { visible: false } )
+                              );
+
+                              //Tweak positions
+                              spheres[0].position.x = -200;
+                              spheres[0].position.y = -10;
+                              spheres[0].position.z = -20;
+
+                              spheres[1].position.x = 200;
+                              spheres[1].position.y = 10;
+                              spheres[1].position.z = 20;
+
+                              spheres[1].position.x = 400;
+                              spheres[1].position.y = 50;
+                              spheres[1].position.z = 20;
+
+                              spheres[1].position.x = -400;
+                              spheres[1].position.y = 100;
+                              spheres[1].position.z = 20;
+
+                              var ambientLight = new THREE.AmbientLight( 0x404040 ); // soft white light
+                              //Note: MeshPhongMaterial will only work if there is a point light
+                              var pointLight = new THREE.PointLight(0xFFFFFF); // Set the color of the light source (white)
+                              pointLight.position.set(-50, -50, 600); // Position the light source at (x, y, z)
+
+                              //Add 3d objects to scene
+                              for(sphere of spheres) {
+                                  scene.add(sphere);
+                              }
+                              //Add plane to scene
+                              scene.add(plane);
+
+                              //Add lights
+                              scene.add(ambientLight);
+                              scene.add(pointLight);
+
+                              //Add a stream of particles
+                              initParticleSystem(scene,
+                                  {
+                                      start: spheres[0].position,
+                                      end: spheres[1].position
+                                  }
+                              );
+
+
+                              //Add text
+                              textMesh1 = new THREE.Mesh( geometry_ip_1, text_material );
+                              textMesh2 = new THREE.Mesh( geometry_ip_2, text_material );
+                              textMesh1.position.z = 500;
+                              textMesh2.position.z = 500;
+                              updateStatus();
+                          }
+                      );
+
+                      renderer.domElement.addEventListener('mousemove', onDocumentMouseMove, false);
+                      renderer.domElement.addEventListener('mousedown', onDocumentMouseDown, false);
+              renderer.domElement.addEventListener('mouseup', onDocumentMouseUp, false);
+
+                      window.addEventListener( 'resize', onWindowResize, false );
+                  }
+
+                  function updateStatus() {
+                      spheres[0].rotation.x += 0.001;
+                      spheres[0].rotation.y += 0.001;
+                      spheres[1].rotation.x += 0.0005;
+                      spheres[1].rotation.y += 0.0005;
+
+                      //controls.update();
+
+                      mParticleSystem.material.uniforms['uTime'].value = mTime
+
+                      mTime += mTimeStep;
+                      mTime %= mDuration;
+
+                      //Things about 3d mouse, all values are from -1 to 1, normally by default is 0
+                      //Axes 0-2: move left and right, move forward and backward, move up and down,
+                      //Axes 3-5: tilt forward and backward, turn left and right, tilt side to side
+                      for (g in controllers) {
+                          var gamepad = controllers[g];
+                          var x = camera.position.x, y = camera.position.y, z = camera.position.z;
+
+                          //Handle the mouse buttons
+                          if (gamepad.buttons[0].value == 1) {
+                              console.log(gamepad.buttons[0].pressed);
+                              console.log(gamepad.buttons[0].value);
+                          }
+                          if (gamepad.buttons[1].value == 1)
+                              console.log("button 1 is pressed");
+
+                          //TODO: threshold for jitter should be done
+
+                          //pan left and right
+                          camera.position.setX(camera.position.x + steppings.axe0 * gamepad.axes[0]);
+
+                          //zoom out and in
+                          if (gamepad.axes[1] <= -0.1 && camera.zoom >= 0.01)
+                              camera.zoom = camera.zoom - 0.005 * Math.abs(gamepad.axes[1]);
+                          else if (gamepad.axes[1] >= 0.1 && camera.zoom <= 100)
+                              camera.zoom = camera.zoom + 0.005 * gamepad.axes[1];
+                          camera.updateProjectionMatrix();
+
+                          //pan up and down
+                          camera.position.setY(camera.position.y + steppings.axe2 * gamepad.axes[2]);
+
+                          //tilt forward and backward
+
+
+                          //turn left and right
+
+
+                          //tilt side to side
+
+                          camera.lookAt(camera.position);
+
+                      }
+                      //console.log(camera);
+                      //debugger;
+
+                      renderer.render( scene, camera );
+
+                      requestAnimationFrame( updateStatus );
+                  }
+
+                  function onDocumentMouseMove(event) {
+                      event.preventDefault();
+
+                      if(event.ctrlKey) {
+                          return;
+                      }
+
+                      //Get current mouse 2d coordinates
+              mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+              mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                      //Update picking ray with camera and mouse position
+              raycaster.setFromCamera(mouse, camera);
+
+              if (SELECTED) {
+                var intersects = raycaster.intersectObject(plane);
+
+                if (intersects.length > 0) {
+                  SELECTED.position.copy(intersects[0].point.sub(offset));
+                              removeParticleSystem(scene);
+                              initParticleSystem(scene, {
+                                  start: spheres[0].position,
+                                  end: spheres[1].position
+                              });
+
+                }
+                return;
+              }
+
+              var intersects = raycaster.intersectObjects(spheres);
+
+              if (intersects.length > 0) {
+                if (INTERSECTED != intersects[0].object) {
+                  if (INTERSECTED) {
+                                  INTERSECTED.material.color.setHex(INTERSECTED.currentHex);
+                              }
+                  INTERSECTED = intersects[0].object;
+                  INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
+
+                  plane.position.copy(INTERSECTED.position);
+                  //plane.lookAt(camera.position);
+                }
+                container.style.cursor = 'pointer';
+                          if(INTERSECTED.name == "earth") {
+                              //scene.add(textMesh1);
+                              $("#info_box").show("fast")
+                                  .html("<span>info</span><br>" + "139.157.236.206");
+
+                              //Show clean others
+                          }
+                          else if(INTERSECTED.name == "copy") {
+                              //scene.add(textMesh2);
+                              $("#info_box").show("fast")
+                                  .html("<span>info</span><br>" + "239.0.171.91");
+                          }
+
+              }
+                      else {
+                if (INTERSECTED) {
+                              INTERSECTED.material.color.setHex(INTERSECTED.currentHex);
+                          }
+                INTERSECTED = null;
+                container.style.cursor = 'auto';
+                          //Logics need to be updated
+                          if(typeof textMesh1 != "undefined") {
+                              //scene.remove(textMesh1);
+                              $("#info_box").fadeOut("fast");
+                          }
+                          if(typeof textMesh2 != "undefined") {
+                              //scene.remove(textMesh2);
+                              $("#info_box").fadeOut("fast");
+                          }
+              }
+                  }
+
+                  function onDocumentMouseDown(event) {
+              event.preventDefault();
+              raycaster.setFromCamera(mouse, camera);
+
+              var intersects = raycaster.intersectObjects(spheres);
+
+              if (intersects.length > 0) {
+                          /*if(event.ctrlKey) {
+                              controls.enabled = true;
+                          }
+                          else {
+                              controls.enabled = false;
+                          }  */
+                SELECTED = intersects[0].object;
+                var intersects = raycaster.intersectObject(plane);
+                if (intersects.length > 0) {
+                  offset.copy(intersects[0].point).sub(plane.position);
+                }
+                container.style.cursor = 'move';
+              }
+            }
+
+            function onDocumentMouseUp( event ) {
+              event.preventDefault();
+              //controls.enabled = true;
+              if (INTERSECTED) {
+                plane.position.copy(INTERSECTED.position);
+                SELECTED = null;
+              }
+              container.style.cursor = 'auto';
+            }
+
+                  //Resize functions
+                  function onWindowResize() {
+              camera.aspect = window.innerWidth / window.innerHeight;
+              camera.updateProjectionMatrix();
+              renderer.setSize( window.innerWidth, window.innerHeight );
+            }
+
+                });
+            });
+
+            //Execute followings when page is loading
+            window.addEventListener("gamepadconnected", connecthandler);
+            window.addEventListener("gamepaddisconnected", disconnecthandler);
+
+            var haveEvents = 'ongamepadconnected' in window;
+            var controllers = {};
+            //Control how fast each axe steps
+            var steppings = {
+                axe0: 2,//pan
+                axe1: 2,//zoom
+                axe2: 2,//pan
+                axe3: 4,//tilt
+                axe4: 5,
+                axe5: 5
+            };
+
+            //It is really important to set the interval short enough to be responsive both for axes and buttons capture
+            if (!haveEvents) {
+                setInterval(scangamepads, 5);
+            }
+
+            function connecthandler(e) {
+                addgamepad(e.gamepad);
+            }
+
+            function disconnecthandler(e) {
+                removegamepad(e.gamepad);
+            }
+
+            function removegamepad(gamepad) {
+                delete controllers[gamepad.index];
+            }
+
+            function scangamepads() {
+                var gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+                for (var i = 0; i < gamepads.length; i++) {
+                    if (gamepads[i]) {
+                        if (gamepads[i].index in controllers) {
+                            controllers[gamepads[i].index] = gamepads[i];
+                        } else {
+                            addgamepad(gamepads[i]);
+                        }
+                    }
+                }
+            }
+
+            function addgamepad(gamepad) {
+                if (gamepad.id !== "SpaceMouse Wireless Receiver (Vendor: 256f Product: c62f)")
+                    return;
+                console.log(gamepad);
+
+                controllers[gamepad.index] = gamepad;
+            }
+
+
+
+            //Must set overflow to hidden to avoid a bit larger screnn rendering
+
+
+
+
+        </script>
+    </body>
+</html>
